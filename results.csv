@@ -1,0 +1,6 @@
+config,AUC,embed_time_s,embed_dim
++alpha=1.0,0.7094,67.492,200
+original,0.7094,65.415,200
++JK concat,0.7243,67.393,600
++neigh-cap=30,0.5921,85.104,200
+all three,0.6502,73.37,600
