@@ -44,59 +44,18 @@ mkdir hashgnn_project && cd hashgnn_project
 
 pip install -r requirements.txt
 
-# Clone the official repo (we need its data + we'll compile its C++ binary)
-git clone https://github.com/drhash-cn/graph-hashing.git
-```
 
 The Twitter data is at `graph-hashing/hash-gnn/data/twitter/`.
 **No conversion needed** — my code reads the official format directly.
 
 ---
 
-## Step 2. Make a 500-node subset of Twitter
-
-This is the only data-prep step. It produces a folder that is a **drop-in
-replacement** for any of the original datasets — same filenames, same
-formats. Both the official C++ binary and my Python code read it.
-
-```bash
-python subset_dataset.py \
-    --in graph-hashing/hash-gnn/data/twitter \
-    --out graph-hashing/hash-gnn/data/twitter500 \
-    --n 500
-```
-
-Output:
-```
-Source dataset: twitter  →  Output name: twitter500
-Nodes: 2511 → 500
-  network: 500 x 500, nnz=21708
-  ratio 0.5: train_edges=5466, test_edges=5388
-  ratio 0.6: train_edges=6462, test_edges=4392
-  ratio 0.7: train_edges=7659, test_edges=3195
-  ratio 0.8: train_edges=8657, test_edges=2197
-  ratio 0.9: train_edges=9794, test_edges=1060
-```
-
-The new folder `data/twitter500/` contains:
-```
-features.txt
-twitter500.adjlist.0.5  ...  twitter500.adjlist.0.9
-twitter500.mat
-twitter500_0.5.mat       ...  twitter500_0.9.mat
-```
-
-These are exactly the files the C++ binary expects.
-
----
-
-## Step 3. Run my Python ablation
 
 This runs the 5 configs (original + 3 mods + all-three) on the subset:
 
 ```bash
 python run_experiment.py \
-    --data graph-hashing/hash-gnn/data/twitter500 \
+    --data graph-hashing/hash-gnn/data/twitter \
     --ratio 0.8 \
     --T 3 --K 200 \
     --seed 42 \
@@ -105,7 +64,7 @@ python run_experiment.py \
 
 You should see something like:
 ```
-Loading graph-hashing/hash-gnn/data/twitter500 at ratio 0.8...
+Loading graph-hashing/hash-gnn/data/twitter at ratio 0.8...
   dataset name: twitter500
   nodes: 500, attributes ≤ 1994
   train edges: 8657, test edges: 2197
@@ -119,18 +78,12 @@ Running Python experiments...
   all three           AUC=0.9571  embed=5.50s  dim=600
 ```
 
-(Numbers will differ slightly from these if you pick a different seed
-or N; what matters is the **pattern**.)
-
-The CSV (`results.csv`) is the main result file. Don't close it yet —
-we'll add one more row in the next step.
-
 ---
 
 ## Step 4. Compile and run the official C++ binary on the same subset
 
 This is the new piece. We compile `hashgnn.cpp` from the official repo,
-run it on `twitter500`, and feed its output back into our evaluation.
+run it on `twitter`, and feed its output back into our evaluation.
 
 ### 4a. Install C++ build dependencies
 
@@ -143,28 +96,6 @@ sudo apt-get install -y libgsl-dev libboost-dev g++
 # macOS (with Homebrew)
 brew install gsl boost
 ```
-
-### 4b. Patch a memory issue in the official source (one-line fix)
-
-The official `hashgnn.cpp` allocates `MAX_NODE_NUM = 1_000_000_000` (1
-billion) pointers at startup, which means it tries to grab ~12 GB of
-RAM **regardless of dataset size**. Most laptops will OOM. Patch it to
-something reasonable for our subset:
-
-```bash
-# In the file: graph-hashing/hash-gnn/hash-gnn/hashgnn.cpp
-# change line 14 (or wherever the macro is):
-#     #define MAX_NODE_NUM 1000000000
-# to:
-#     #define MAX_NODE_NUM 100000
-
-# Or do it in one command:
-sed -i 's/#define MAX_NODE_NUM 1000000000/#define MAX_NODE_NUM 100000/' \
-    graph-hashing/hash-gnn/hash-gnn/hashgnn.cpp
-```
-
-This change does not affect the algorithm — it just makes the static
-buffer fit in normal memory. (On macOS use `sed -i ''` instead of `sed -i`.)
 
 ### 4c. Compile
 
